@@ -1,4 +1,4 @@
-module mymodule
+module easyai-gateway
 
 go 1.25.0
 

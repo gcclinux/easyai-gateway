@@ -2,3 +2,4 @@
 /mymodule*
 .env.local
 .local
+*.exe
