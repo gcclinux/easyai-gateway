@@ -11,10 +11,11 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 	"time"
+
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/joho/godotenv"
 )
 
 // Command-line flags.
@@ -76,20 +77,36 @@ func main() {
 		host = "0.0.0.0" // Bind to all interfaces (for IPv4 access)
 	}
 
+	tlsCert := os.Getenv("TLS_CERT")
+	tlsKey := os.Getenv("TLS_KEY")
+	useTLS := tlsCert != "" && tlsKey != ""
+
 	addr := host + ":" + port
-	
+	scheme := "http"
+	if useTLS {
+		scheme = "https"
+	}
+
 	// Print a clean, informative startup message
 	log.Printf("=====================================================")
 	log.Printf("Easy AI API Gateway")
 	log.Printf("-----------------------------------------------------")
-	log.Printf("Local Access:   http://localhost:%s", port)
-	log.Printf("Network Access: http://%s:%s", "your-ip-address", port) 
+	log.Printf("Local Access:   %s://localhost:%s", scheme, port)
+	log.Printf("Network Access: %s://%s:%s", scheme, "your-ip-address", port)
+	if useTLS {
+		log.Printf("TLS Cert:       %s", tlsCert)
+		log.Printf("TLS Key:        %s", tlsKey)
+	}
 	log.Printf("=====================================================")
 
-	// If using 0.0.0.0, we can effectively show 'localhost' in the bind string for Gin's debug log
-	// if we slightly wrap the Run call or just bind explicitly.
-	if err := r.Run(addr); err != nil {
-		log.Fatalf("could not start server: %v", err)
+	if useTLS {
+		if err := r.RunTLS(addr, tlsCert, tlsKey); err != nil {
+			log.Fatalf("could not start TLS server: %v", err)
+		}
+	} else {
+		if err := r.Run(addr); err != nil {
+			log.Fatalf("could not start server: %v", err)
+		}
 	}
 }
 
@@ -205,7 +222,7 @@ func init() {
 
 func GetCreditsHandler(c *gin.Context) {
 	licenseId := c.Param("licenseId")
-	
+
 	credits, ok := creditsStore[licenseId]
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "License ID not found"})
@@ -296,7 +313,7 @@ func UpdateCreditsHandler(c *gin.Context) {
 	credits.LastUpdated = time.Now().UnixMilli()
 	// Maintain application if not specified? Or handle it in req?
 	// Let's assume we might want to update application too.
-	
+
 	if err := saveEncryptedCache(creditsStore, cachePath, passphrase); err != nil {
 		log.Println("Error saving encrypted cache after update:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save credits to local store"})
@@ -385,14 +402,14 @@ func DeleteUserHandler(c *gin.Context) {
 
 func DeleteCreditsHandler(c *gin.Context) {
 	licenseId := c.Param("licenseId")
-	
+
 	if _, ok := creditsStore[licenseId]; !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
 	}
 
 	delete(creditsStore, licenseId)
-	
+
 	if err := saveEncryptedCache(creditsStore, cachePath, passphrase); err != nil {
 		log.Println("Error saving encrypted cache after deletion:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save changes after deletion"})

@@ -14,13 +14,17 @@ This project is a Go-based management server for EasyEditor Premium, integrating
   ADMIN_EMAIL=admin-email@gmail.com
   SERVER_PORT=5555
   PRIME_KEY=xxxxxx-xxxxxx-xxxxxx-xxxxxx
+  TLS_CERT=/path/to/your/cert.crt
+  TLS_KEY=/path/to/your/private.key
   ```
 
   | Variable | Description |
   |---|---|
   | `GMAIL_USER` | Gmail address used to send emails (login tokens, welcome emails) |
   | `GMAIL_PASS` | Gmail App Password (not your regular password) |
-  | `ADMIN_EMAIL` | The admin email that receives login tokens |
+  | `PRIME_KEY` | Master API key used to authenticate all API requests via `X-API-Key` header |
+  | `TLS_CERT` | *(Optional)* Path to the TLS certificate file (`.crt`) for HTTPS |
+  | `TLS_KEY` | *(Optional)* Path to the TLS private key file (`.key`) for HTTPS |
   | `SERVER_PORT` | Port the server listens on (defaults to `8080`) |
   | `PRIME_KEY` | Master API key used to authenticate all API requests via `X-API-Key` header |
 
