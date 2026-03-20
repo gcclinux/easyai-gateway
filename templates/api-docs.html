@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EasyAI API Documentation & Playground</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <style>
+        :root {
+            --primary-bg: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --accent-hover: #0ea5e9;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+        }
+
+        body {
+            background-color: var(--primary-bg);
+            color: var(--text-main);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            margin: 0;
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 300px;
+            background-color: #020617;
+            border-right: 1px solid #1e293b;
+            padding: 20px;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        .sidebar h2 {
+            font-size: 1.25rem;
+            margin-bottom: 2rem;
+            color: var(--accent);
+        }
+
+        .nav-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .nav-group-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+        }
+
+        .nav-link {
+            display: block;
+            padding: 0.5rem 0.75rem;
+            color: var(--text-main);
+            text-decoration: none;
+            font-size: 0.875rem;
+            border-radius: 0.375rem;
+            margin-bottom: 0.25rem;
+            transition: all 0.2s;
+        }
+
+        .nav-link:hover {
+            background-color: #1e293b;
+            color: var(--accent);
+        }
+
+        .nav-link.active {
+            background-color: #0ea5e920;
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex-grow: 1;
+            padding: 40px;
+            max-width: 1000px;
+        }
+
+        .section {
+            margin-bottom: 4rem;
+            scroll-margin-top: 40px;
+        }
+
+        .endpoint-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .method {
+            font-weight: 700;
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            text-transform: uppercase;
+        }
+
+        .method.get {
+            background-color: #22c55e20;
+            color: #22c55e;
+        }
+
+        .method.post {
+            background-color: #38bdf820;
+            color: #38bdf8;
+        }
+
+        .method.delete {
+            background-color: #ef444420;
+            color: #ef4444;
+        }
+
+        .path {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.125rem;
+            color: var(--text-main);
+        }
+
+        .description {
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+        }
+
+        /* Playground Card */
+        .playground-card {
+            background-color: var(--card-bg);
+            border-radius: 0.75rem;
+            border: 1px solid #334155;
+            overflow: hidden;
+            margin-top: 1.5rem;
+        }
+
+        .playground-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #334155;
+            background-color: #1e293b80;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .playground-body {
+            padding: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        label {
+            display: block;
+            font-size: 0.875rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-muted);
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            background-color: #0f172a;
+            border: 1px solid #334155;
+            color: var(--text-main);
+            padding: 0.75rem;
+            border-radius: 0.375rem;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+
+        input:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 1px var(--accent);
+        }
+
+        .btn-send {
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.375rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-send:hover {
+            background-color: var(--accent-hover);
+        }
+
+        /* Response View */
+        .response-view {
+            margin-top: 1.5rem;
+            background-color: #020617;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .response-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        pre {
+            margin: 0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: #d1d5db;
+        }
+
+        .status-badge {
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            font-weight: 600;
+        }
+
+        .status-success {
+            background-color: #22c55e20;
+            color: #22c55e;
+        }
+
+        .status-error {
+            background-color: #ef444420;
+            color: #ef4444;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--accent);
+            text-decoration: none;
+            margin-bottom: 2rem;
+            font-size: 0.875rem;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="sidebar">
+        <h2>EasyAI API</h2>
+
+        <div class="nav-group">
+            <div class="nav-group-title">Users</div>
+            <a href="#create-user" class="nav-link">Create User</a>
+            <a href="#delete-user" class="nav-link">Delete User</a>
+            <a href="#get-credits" class="nav-link">Get User Status</a>
+        </div>
+
+        <div class="nav-group">
+            <div class="nav-group-title">LLM Usage</div>
+            <a href="#check-credits" class="nav-link">Check Credits</a>
+            <a href="#report-usage" class="nav-link">Report Usage</a>
+        </div>
+
+        <div class="nav-group">
+            <div class="nav-group-title">Management</div>
+            <a href="#local-data" class="nav-link">Get All Local Data</a>
+            <a href="#update-credits" class="nav-link">Update / Upsert Credits</a>
+            <a href="#delete-credits" class="nav-link">Hard Delete User Data</a>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <a href="/dashboard" class="back-link">← Back to Dashboard</a>
+
+        <h1>API Documentation & Playground</h1>
+        <p class="description">Test and explore the EasyAI Gateway API endpoints directly from this interactive
+            documentation. All requests require your <code>PRIME_KEY</code> in the <code>X-API-Key</code> header.</p>
+
+        <!-- Create User -->
+        <div id="create-user" class="section">
+            <div class="endpoint-header">
+                <span class="method post">POST</span>
+                <span class="path">/api/create-user</span>
+            </div>
+            <p>Onboard a new user. Generates a unique <code>licenseId</code> if not provided.</p>
+
+            <div class="playground-card">
+                <div class="playground-header">
+                    <span>Playground</span>
+                </div>
+                <div class="playground-body">
+                    <div class="form-group">
+                        <label>JSON Body</label>
+                        <textarea id="body_create_user" rows="6">{
+  "email": "test@example.com",
+  "credits": 1000000,
+  "application": "EasyEditor"
+}</textarea>
+                    </div>
+                    <button class="btn-send"
+                        onclick="sendRequest('POST', '/api/create-user', 'body_create_user', 'resp_create_user')">Test
+                        Endpoint</button>
+
+                    <div id="resp_create_user" class="response-view"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Check Credits -->
+        <div id="check-credits" class="section">
+            <div class="endpoint-header">
+                <span class="method post">POST</span>
+                <span class="path">/api/check-credits</span>
+            </div>
+            <p>Check if a user has sufficient credits available for a request.</p>
+
+            <div class="playground-card">
+                <div class="playground-header">
+                    <span>Playground</span>
+                </div>
+                <div class="playground-body">
+                    <div class="form-group">
+                        <label>JSON Body</label>
+                        <textarea id="body_check_credits" rows="4">{
+  "licenseId": "USER-LICENSE-KEY",
+  "estimatedTokens": 50
+}</textarea>
+                    </div>
+                    <button class="btn-send"
+                        onclick="sendRequest('POST', '/api/check-credits', 'body_check_credits', 'resp_check_credits')">Test
+                        Endpoint</button>
+
+                    <div id="resp_check_credits" class="response-view"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Report Usage -->
+        <div id="report-usage" class="section">
+            <div class="endpoint-header">
+                <span class="method post">POST</span>
+                <span class="path">/api/report-usage</span>
+            </div>
+            <p>Report actual token consumption after an LLM call.</p>
+
+            <div class="playground-card">
+                <div class="playground-header">
+                    <span>Playground</span>
+                </div>
+                <div class="playground-body">
+                    <div class="form-group">
+                        <label>JSON Body</label>
+                        <textarea id="body_report_usage" rows="5">{
+  "licenseId": "USER-LICENSE-KEY",
+  "promptTokens": 10,
+  "candidateTokens": 40
+}</textarea>
+                    </div>
+                    <button class="btn-send"
+                        onclick="sendRequest('POST', '/api/report-usage', 'body_report_usage', 'resp_report_usage')">Test
+                        Endpoint</button>
+
+                    <div id="resp_report_usage" class="response-view"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Get Single User -->
+        <div id="get-credits" class="section">
+            <div class="endpoint-header">
+                <span class="method get">GET</span>
+                <span class="path">/api/credits/:licenseId</span>
+            </div>
+            <p>Get current balance and status for a specific user license.</p>
+
+            <div class="playground-card">
+                <div class="playground-header">
+                    <span>Playground</span>
+                </div>
+                <div class="playground-body">
+                    <div class="form-group">
+                        <label>License ID</label>
+                        <input type="text" id="param_get_credits" placeholder="425cbaa0-...">
+                    </div>
+                    <button class="btn-send"
+                        onclick="sendRequest('GET', '/api/credits/' + document.getElementById('param_get_credits').value, null, 'resp_get_credits')">Test
+                        Endpoint</button>
+
+                    <div id="resp_get_credits" class="response-view"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Local Data -->
+        <div id="local-data" class="section">
+            <div class="endpoint-header">
+                <span class="method get">GET</span>
+                <span class="path">/api/local-data</span>
+            </div>
+            <p>Retrieve all users stored in the local encrypted cache.</p>
+
+            <div class="playground-card">
+                <div class="playground-header">
+                    <span>Playground</span>
+                </div>
+                <div class="playground-body">
+                    <button class="btn-send"
+                        onclick="sendRequest('GET', '/api/local-data', null, 'resp_local_data')">Fetch All Data</button>
+
+                    <div id="resp_local_data" class="response-view"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delete User API -->
+        <div id="delete-user" class="section">
+            <div class="endpoint-header">
+                <span class="method post">POST</span>
+                <span class="path">/api/delete-user</span>
+            </div>
+            <p>Remove a user from the system.</p>
+
+            <div class="playground-card">
+                <div class="playground-header">
+                    <span>Playground</span>
+                </div>
+                <div class="playground-body">
+                    <div class="form-group">
+                        <label>JSON Body</label>
+                        <textarea id="body_delete_user" rows="4">{
+  "licenseId": "USER-LICENSE-KEY",
+  "email": "user@example.com"
+}</textarea>
+                    </div>
+                    <button class="btn-send"
+                        onclick="sendRequest('POST', '/api/delete-user', 'body_delete_user', 'resp_delete_user')">Test
+                        Endpoint</button>
+
+                    <div id="resp_delete_user" class="response-view"></div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const PRIME_KEY = "{{.PrimeKey}}";
+
+        async function sendRequest(method, path, bodyId, respId) {
+            const respElement = document.getElementById(respId);
+            respElement.style.display = 'block';
+            respElement.innerHTML = '<div class="response-header">Loading...</div>';
+
+            const headers = {
+                'X-API-Key': PRIME_KEY
+            };
+
+            let options = {
+                method: method,
+                headers: headers
+            };
+
+            if (method === 'POST') {
+                headers['Content-Type'] = 'application/json';
+                const bodyText = document.getElementById(bodyId).value;
+                try {
+                    JSON.parse(bodyText); // validation
+                    options.body = bodyText;
+                } catch (e) {
+                    respElement.innerHTML = `<div class="response-header"><span class="status-badge status-error">Invalid JSON</span></div><pre>${e.message}</pre>`;
+                    return;
+                }
+            }
+
+            try {
+                const startTime = performance.now();
+                const response = await fetch(path, options);
+                const endTime = performance.now();
+                const duration = Math.round(endTime - startTime);
+
+                const data = await response.json();
+
+                const statusClass = response.ok ? 'status-success' : 'status-error';
+
+                respElement.innerHTML = `
+                    <div class="response-header">
+                        <span>Status: <span class="status-badge ${statusClass}">${response.status} ${response.statusText}</span></span>
+                        <span>Time: ${duration}ms</span>
+                    </div>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (err) {
+                respElement.innerHTML = `
+                    <div class="response-header">
+                        <span class="status-badge status-error">Network Error</span>
+                    </div>
+                    <pre>${err.message}</pre>
+                `;
+            }
+        }
+    </script>
+</body>
+
+</html>

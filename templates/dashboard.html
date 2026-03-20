@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - EasyAI Gateway</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+
+    <div class="header">
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <i class="fas fa-microchip" style="color: var(--accent); font-size: 1.5rem;"></i>
+            <h1>EasyAI Gateway</h1>
+        </div>
+        <div style="display: flex; gap: 15px; align-items: center;">
+            <a href="/api-docs" class="logout-btn" style="background-color: var(--accent);">
+                <i class="fas fa-book" style="margin-right: 8px;"></i>API Docs
+            </a>
+            <a href="/" class="logout-btn">
+                <i class="fas fa-sign-out-alt" style="margin-right: 8px;"></i>Logout
+            </a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h2>System Overview</h2>
+            <p>Welcome to your central hub for LLM infrastructure. Monitor performance, manage pricing providers, and
+                control user access across all integrated applications.</p>
+        </div>
+
+        <div class="grid-container">
+            <div class="card">
+                <div>
+                    <h3><i class="fas fa-chart-line" style="margin-right: 12px; color: var(--accent);"></i>API Usage
+                    </h3>
+                    <p>Track real-time token consumption and credit balances for every license key.</p>
+                </div>
+                <button id="usageBtn">Monitor Consumption</button>
+            </div>
+
+            <div class="card">
+                <div>
+                    <h3><i class="fas fa-server" style="margin-right: 12px; color: var(--accent);"></i>LLM Providers
+                    </h3>
+                    <p>Define and manage your tiered LLM models, providers, and their corresponding internal weights.
+                    </p>
+                </div>
+                <button id="llmProvidersBtn">Manage Models</button>
+            </div>
+
+            <div class="card">
+                <div>
+                    <h3><i class="fas fa-users-cog" style="margin-right: 12px; color: var(--accent);"></i>User
+                        Management</h3>
+                    <p>Provision new license keys, update account balances, and manage application assignments.</p>
+                </div>
+                <button id="genericLLMBtn">Administer Users</button>
+            </div>
+        </div>
+
+        <!-- Usage Table Container -->
+        <div class="data-table-container" id="usageTableContainer" style="display: none;">
+            <h2><i class="fas fa-history" style="margin-right: 15px;"></i>Detailed ConsumptionLog</h2>
+            <div id="usageLoading">Gathering usage data...</div>
+            <table id="usageTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>License ID</th>
+                        <th>Email</th>
+                        <th>Monthly Credits</th>
+                        <th>Top-up Pool</th>
+                        <th>Used</th>
+                        <th>Remaining</th>
+                        <th>Application</th>
+                        <th>Last Updated</th>
+                    </tr>
+                </thead>
+                <tbody id="usageTableBody"></tbody>
+            </table>
+        </div>
+
+        <!-- LLM Providers Container -->
+        <div class="data-table-container" id="llmTableContainer" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+                <h2 style="margin: 0;"><i class="fas fa-network-wired" style="margin-right: 15px;"></i>Model
+                    Provisioning</h2>
+                <div style="display: flex; gap: 10px;">
+                    <button id="saveLLMsBtn" style="background-color: var(--success);">
+                        <i class="fas fa-save" style="margin-right: 8px;"></i>Save Configuration
+                    </button>
+                    <button id="newLLMBtn" class="secondary">
+                        <i class="fas fa-plus" style="margin-right: 8px;"></i>Add Model
+                    </button>
+                </div>
+            </div>
+            <table id="llmTable">
+                <thead>
+                    <tr>
+                        <th>UID</th>
+                        <th>Weight</th>
+                        <th>Provider</th>
+                        <th>Model Name</th>
+                        <th>Operational Notes</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="llmTableBody"></tbody>
+            </table>
+        </div>
+
+        <!-- User Management Container -->
+        <div class="data-table-container" id="genericLLMTableContainer" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+                <h2 style="margin: 0;"><i class="fas fa-user-shield" style="margin-right: 15px;"></i>User Access Control
+                </h2>
+                <button id="newGenericUserBtn" class="secondary">
+                    <i class="fas fa-user-plus" style="margin-right: 8px;"></i>Provision New User
+                </button>
+            </div>
+            <div id="genericLoading">Compiling user records...</div>
+            <table id="genericTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>License ID</th>
+                        <th>Email Address</th>
+                        <th>Monthly Credits</th>
+                        <th>Top-up Pool</th>
+                        <th>Consumed</th>
+                        <th>Target App</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="genericTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const usageBtn = document.getElementById('usageBtn');
+            const llmBtn = document.getElementById('llmProvidersBtn');
+            const genericBtn = document.getElementById('genericLLMBtn');
+            const newLLMBtn = document.getElementById('newLLMBtn');
+            const saveLLMsBtn = document.getElementById('saveLLMsBtn');
+            const newGenericBtn = document.getElementById('newGenericUserBtn');
+
+            const usageContainer = document.getElementById('usageTableContainer');
+            const llmContainer = document.getElementById('llmTableContainer');
+            const genericContainer = document.getElementById('genericLLMTableContainer');
+
+            const PRIME_KEY = "{{.PrimeKey}}";
+            const storageKey = 'easy_ai_llms';
+
+            const initialLLMs = [
+                { id: 0, value: 200, provider: 'Ollama', model: 'qwen2.5-coder:3b', notes: 'Recommended for coding tasks' },
+                { id: 1, value: 100, provider: 'Ollama', model: 'qwen2.5-coder:1.5b', notes: 'Lightweight coding model' },
+                { id: 2, value: 500, provider: 'DeepSeek', model: 'deepseek-coder-v2:16b', notes: 'Advanced coding capabilities' },
+                { id: 3, value: 1000, provider: 'Google Gemini', model: 'gemini-3-flash-preview', notes: 'Fast responses' },
+                { id: 4, value: 2000, provider: 'Google Gemini', model: 'gemini-3.1-pro-preview', notes: 'Advanced reasoning' },
+                { id: 5, value: 2500, provider: 'Google Gemini', model: 'gemini-3.1-flash-lite', notes: 'Lightweight and fast' },
+                { id: 6, value: 4000, provider: 'AWS Bedrock', model: 'anthropic.claude-sonnet-4-6', notes: 'Best coding performance' }
+            ];
+
+            function hideAll() {
+                usageContainer.style.display = 'none';
+                llmContainer.style.display = 'none';
+                genericContainer.style.display = 'none';
+            }
+
+            usageBtn.onclick = () => { toggleContainer(usageContainer); };
+            llmBtn.onclick = () => { toggleContainer(llmContainer); };
+            genericBtn.onclick = () => { toggleContainer(genericContainer); };
+
+            function toggleContainer(container) {
+                const wasVisible = container.style.display === 'block';
+                hideAll();
+                if (!wasVisible) {
+                    container.style.display = 'block';
+                    container.scrollIntoView({ behavior: 'smooth' });
+                }
+            }
+
+            // LLM Table Logic
+            const llmTableBody = document.getElementById('llmTableBody');
+
+            function createLLMRow(item) {
+                const row = document.createElement('tr');
+
+                const tdId = document.createElement('td'); tdId.textContent = item.id; row.appendChild(tdId);
+
+                const tdVal = document.createElement('td');
+                const inVal = document.createElement('input'); inVal.type = 'number'; inVal.value = item.value; inVal.style.width = '80px';
+                tdVal.appendChild(inVal); row.appendChild(tdVal);
+
+                const tdProv = document.createElement('td');
+                const inProv = document.createElement('input'); inProv.type = 'text'; inProv.value = item.provider;
+                tdProv.appendChild(inProv); row.appendChild(tdProv);
+
+                const tdModel = document.createElement('td');
+                const inModel = document.createElement('input'); inModel.type = 'text'; inModel.value = item.model;
+                tdModel.appendChild(inModel); row.appendChild(tdModel);
+
+                const tdNotes = document.createElement('td');
+                const inNotes = document.createElement('input'); inNotes.type = 'text'; inNotes.value = item.notes; inNotes.style.width = '100%';
+                tdNotes.appendChild(inNotes); row.appendChild(tdNotes);
+
+                const tdAction = document.createElement('td');
+                const delBtn = document.createElement('button');
+                delBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+                delBtn.style.backgroundColor = 'var(--danger)';
+                delBtn.style.padding = '8px 12px';
+                delBtn.onclick = () => { if (confirm('Delete internal config?')) row.remove(); };
+                tdAction.appendChild(delBtn); row.appendChild(tdAction);
+
+                llmTableBody.appendChild(row);
+            }
+
+            function loadLLMs() {
+                const saved = localStorage.getItem(storageKey);
+                const list = saved ? JSON.parse(saved) : initialLLMs;
+                llmTableBody.innerHTML = '';
+                list.forEach(createLLMRow);
+            }
+
+            function saveAllLLMs() {
+                const rows = Array.from(llmTableBody.querySelectorAll('tr'));
+                const data = rows.map(row => {
+                    const inputs = row.querySelectorAll('input');
+                    return {
+                        id: parseInt(row.querySelector('td').textContent),
+                        value: parseInt(inputs[0].value),
+                        provider: inputs[1].value,
+                        model: inputs[2].value,
+                        notes: inputs[3].value
+                    };
+                });
+                localStorage.setItem(storageKey, JSON.stringify(data));
+                saveLLMsBtn.innerHTML = '<i class="fas fa-check-circle"></i> Config Saved';
+                setTimeout(() => { saveLLMsBtn.innerHTML = '<i class="fas fa-save"></i> Save Configuration'; }, 2000);
+            }
+
+            newLLMBtn.onclick = () => {
+                const rows = llmTableBody.querySelectorAll('tr');
+                let maxId = -1;
+                rows.forEach(r => {
+                    const id = parseInt(r.querySelector('td').textContent);
+                    if (id > maxId) maxId = id;
+                });
+                createLLMRow({ id: maxId + 1, value: 0, provider: '', model: '', notes: '' });
+                llmTableBody.lastChild.scrollIntoView({ behavior: 'smooth' });
+            };
+
+            saveLLMsBtn.onclick = saveAllLLMs;
+            loadLLMs();
+
+            // Generic User Logic
+            function createGenericRow(u, tbody) {
+                const row = document.createElement('tr');
+                const tdId = document.createElement('td'); tdId.textContent = u.licenseId; tdId.style.fontFamily = 'monospace'; row.appendChild(tdId);
+
+                const tdEmail = document.createElement('td');
+                const inEmail = document.createElement('input'); inEmail.type = 'text'; inEmail.value = u.email || '';
+                tdEmail.appendChild(inEmail); row.appendChild(tdEmail);
+
+                const tdTotal = document.createElement('td');
+                const inTotal = document.createElement('input'); inTotal.type = 'number'; inTotal.value = u.balance || 1000000; inTotal.style.width = '100px';
+                tdTotal.appendChild(inTotal); row.appendChild(tdTotal);
+
+                const tdTopup = document.createElement('td');
+                const inTopup = document.createElement('input'); inTopup.type = 'number'; inTopup.value = u.creditsTopup || 0; inTopup.style.width = '80px';
+                tdTopup.appendChild(inTopup); row.appendChild(tdTopup);
+
+                const tdUsed = document.createElement('td'); tdUsed.textContent = (u.tokensUsed || 0).toLocaleString(); row.appendChild(tdUsed);
+
+                const tdApp = document.createElement('td');
+                const inApp = document.createElement('input'); inApp.type = 'text'; inApp.value = u.application || 'EasyAI';
+                tdApp.appendChild(inApp); row.appendChild(tdApp);
+
+                const tdActions = document.createElement('td');
+                const btnContainer = document.createElement('div');
+                btnContainer.style.display = 'flex';
+                btnContainer.style.gap = '8px';
+
+                const saveBtn = document.createElement('button');
+                saveBtn.innerHTML = '<i class="fas fa-check"></i>';
+                saveBtn.style.backgroundColor = 'var(--success)';
+                saveBtn.style.padding = '8px 12px';
+
+                const delBtn = document.createElement('button');
+                delBtn.innerHTML = '<i class="fas fa-user-minus"></i>';
+                delBtn.style.backgroundColor = 'var(--danger)';
+                delBtn.style.padding = '8px 12px';
+
+                saveBtn.onclick = () => {
+                    saveBtn.disabled = true;
+                    fetch('/api/update-credits', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-API-Key': PRIME_KEY },
+                        body: JSON.stringify({
+                            licenseId: u.licenseId,
+                            email: inEmail.value,
+                            credits: parseInt(inTotal.value),
+                            creditsTopup: parseInt(inTopup.value),
+                            application: inApp.value
+                        })
+                    }).then(r => r.json()).then(res => {
+                        if (res.status === 'success') {
+                            saveBtn.innerHTML = '<i class="fas fa-check-double"></i>';
+                            setTimeout(() => { saveBtn.innerHTML = '<i class="fas fa-check"></i>'; saveBtn.disabled = false; }, 2000);
+                        }
+                        else { alert('Save failed: ' + (res.error || 'Unknown error')); saveBtn.disabled = false; }
+                    });
+                };
+
+                delBtn.onclick = () => {
+                    if (confirm('Revoke this license?')) {
+                        fetch(`/api/delete-credits/${u.licenseId}`, { method: 'DELETE', headers: { 'X-API-Key': PRIME_KEY } }).then(r => r.json()).then(res => { if (res.status === 'success') row.remove(); });
+                    }
+                };
+
+                btnContainer.appendChild(saveBtn); 
+                btnContainer.appendChild(delBtn); 
+                tdActions.appendChild(btnContainer);
+                row.appendChild(tdActions);
+                tbody.appendChild(row);
+            }
+
+            newGenericBtn.onclick = () => {
+                genericContainer.style.display = 'block';
+                genericContainer.scrollIntoView({ behavior: 'smooth' });
+                createGenericRow({ licenseId: self.crypto.randomUUID() }, document.getElementById('genericTableBody'));
+            };
+
+            fetch('/api/local-data', { headers: { 'X-API-Key': PRIME_KEY } })
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('usageLoading').style.display = 'none';
+                    document.getElementById('genericLoading').style.display = 'none';
+                    const users = data.users || {};
+                    const usageTbody = document.getElementById('usageTableBody');
+                    const genericTbody = document.getElementById('genericTableBody');
+
+                    document.getElementById('usageTable').style.display = 'table';
+                    document.getElementById('genericTable').style.display = 'table';
+
+                    genericTbody.innerHTML = '';
+                    usageTbody.innerHTML = '';
+
+                    Object.values(users).forEach(u => {
+                        const uRow = document.createElement('tr');
+                        const cBase = u.balance !== undefined ? u.balance : 1000000;
+                        const cTop = u.creditsTopup !== undefined ? u.creditsTopup : 0;
+                        const tdUsedCount = u.tokensUsed !== undefined ? u.tokensUsed : 0;
+                        const remVal = (cBase + cTop) - tdUsedCount;
+
+                        const uCols = [
+                            u.licenseId,
+                            u.email || '',
+                            cBase.toLocaleString(),
+                            cTop.toLocaleString(),
+                            tdUsedCount.toLocaleString(),
+                            remVal.toLocaleString(),
+                            u.application || '',
+                            u.lastUpdated ? new Date(u.lastUpdated).toLocaleString() : 'N/A'
+                        ];
+
+                        uCols.forEach((text, idx) => {
+                            const td = document.createElement('td');
+                            td.textContent = text;
+                            if (idx === 0) td.style.fontFamily = 'monospace';
+                            uRow.appendChild(td);
+                        });
+                        usageTbody.appendChild(uRow);
+
+                        createGenericRow(u, genericTbody);
+                    });
+
+                    if (Object.keys(users).length === 0) {
+                        const row = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 8; td.textContent = "No active license records identified."; td.style.textAlign = "center"; row.appendChild(td); usageTbody.appendChild(row);
+                    }
+                })
+                .catch(err => console.error('Data Fetch Error:', err));
+        });
+    </script>
+</body>
+
+</html>

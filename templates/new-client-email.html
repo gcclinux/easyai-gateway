@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; padding: 20px; color: #e2e8f0; line-height: 1.6; }
+        .container { background-color: #1e293b; padding: 40px; border-radius: 12px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3); max-width: 600px; margin: 0 auto; border: 1px solid #334155; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .header h2 { color: #38bdf8; margin: 0; font-size: 28px; letter-spacing: -0.5px; }
+        .details-grid { background-color: #0f172a; padding: 25px; border-radius: 8px; margin: 25px 0; border-left: 4px solid #38bdf8; }
+        .detail-item { margin-bottom: 15px; }
+        .detail-label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; margin-bottom: 4px; }
+        .detail-value { font-size: 16px; color: #f1f5f9; font-family: 'Courier New', Courier, monospace; word-break: break-all; }
+        .important-note { background-color: #450a0a; color: #fecaca; padding: 15px; border-radius: 6px; border: 1px solid #7f1d1d; margin-top: 30px; font-size: 14px; }
+        .footer { margin-top: 40px; font-size: 12px; color: #64748b; text-align: center; border-top: 1px solid #334155; padding-top: 20px; }
+        .highlight { color: #38bdf8; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>Welcome to EasyAI</h2>
+        </div>
+        <p>Hello,</p>
+        <p>Your new account has been successfully created. Below are your access details for the <span class="highlight">EasyAI API Gateway</span>.</p>
+        
+        <div class="details-grid">
+            <div class="detail-item">
+                <div class="detail-label">License ID (Key)</div>
+                <div class="detail-value">{{.LicenseID}}</div>
+            </div>
+            <div class="detail-item">
+                <div class="detail-label">Registered Email</div>
+                <div class="detail-value">{{.Email}}</div>
+            </div>
+            <div class="detail-item">
+                <div class="detail-label">Monthly Credits</div>
+                <div class="detail-value">{{.Credits}}</div>
+            </div>
+            <div class="detail-item">
+                <div class="detail-label">Application</div>
+                <div class="detail-value">{{.Application}}</div>
+            </div>
+        </div>
+
+        <div class="important-note">
+            <strong>CRITICAL:</strong> Please save your <span class="highlight">License ID</span> in a secure location. This key is the only way to access your AI LLM credits. If lost, you may lose access to your current balance.
+        </div>
+
+        <p>You can now use this License ID in your application to start processing LLM requests.</p>
+
+        <div class="footer">
+            &copy; 2026 EasyAI Standalone API Gateway. All rights reserved.
+        </div>
+    </div>
+</body>
+</html>

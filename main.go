@@ -1,0 +1,403 @@
+// Copyright 2023 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+	"time"
+	"github.com/google/uuid"
+)
+
+// Command-line flags.
+var (
+	httpAddr = flag.String("addr", "localhost:8080", "Listen address")
+)
+
+func main() {
+	flag.Parse()
+
+	err := godotenv.Load(".env.local")
+	if err != nil {
+		log.Println("Error loading .env.local file, relying on environment variables.")
+	}
+
+	// Initialize Gin router
+	r := gin.Default()
+
+	// Prevent caching globally so sensitive tokens/pages aren't stored
+	r.Use(func(c *gin.Context) {
+		c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+		c.Header("Pragma", "no-cache")
+		c.Header("Expires", "0")
+		c.Next()
+	})
+
+	// Serve static files
+	r.Static("/static", "./static")
+
+	// Load HTML templates from the templates directory
+	r.LoadHTMLGlob("templates/*")
+
+	// Define routes
+	r.GET("/", HomeHandler)
+	r.POST("/request-login", RequestLoginHandler)
+	r.POST("/login", LoginHandler)
+	r.GET("/dashboard", DashboardHandler)
+	r.GET("/api-docs", ApiDocsHandler)
+	// Internal API routes (for dashboard)
+	api := r.Group("/api", AuthMiddleware())
+	{
+		api.GET("/local-data", LocalDataHandler)
+		api.GET("/credits/:licenseId", GetCreditsHandler)
+		api.POST("/check-credits", CheckCreditsHandler)
+		api.POST("/report-usage", ReportUsageHandler)
+		api.POST("/update-credits", UpdateCreditsHandler)
+		api.DELETE("/delete-credits/:licenseId", DeleteCreditsHandler)
+
+		// New API entries
+		api.POST("/create-user", CreateUserHandler)
+		api.POST("/delete-user", DeleteUserHandler)
+	}
+	host := os.Getenv("SERVER_HOST")
+	port := os.Getenv("SERVER_PORT")
+	if port == "" {
+		port = "8080"
+	}
+	if host == "" {
+		host = "0.0.0.0" // Bind to all interfaces (for IPv4 access)
+	}
+
+	addr := host + ":" + port
+	
+	// Print a clean, informative startup message
+	log.Printf("=====================================================")
+	log.Printf("Easy AI API Gateway")
+	log.Printf("-----------------------------------------------------")
+	log.Printf("Local Access:   http://localhost:%s", port)
+	log.Printf("Network Access: http://%s:%s", "your-ip-address", port) 
+	log.Printf("=====================================================")
+
+	// If using 0.0.0.0, we can effectively show 'localhost' in the bind string for Gin's debug log
+	// if we slightly wrap the Run call or just bind explicitly.
+	if err := r.Run(addr); err != nil {
+		log.Fatalf("could not start server: %v", err)
+	}
+}
+
+func HomeHandler(c *gin.Context) {
+	c.HTML(http.StatusOK, "login.html", nil)
+}
+
+func RequestLoginHandler(c *gin.Context) {
+	adminEmail := os.Getenv("ADMIN_EMAIL")
+	if adminEmail == "" {
+		log.Println("ADMIN_EMAIL not set")
+		c.String(http.StatusInternalServerError, "Server configuration error")
+		return
+	}
+
+	token, err := generateToken()
+	if err != nil {
+		log.Println("Error generating token:", err)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+
+	storeToken(adminEmail, token)
+
+	err = sendLoginToken(adminEmail, token)
+	if err != nil {
+		log.Println("Error sending email:", err)
+		c.String(http.StatusInternalServerError, "Failed to send login email")
+		return
+	}
+
+	c.String(http.StatusOK, "Login token sent to admin email. Please check your inbox.")
+}
+
+func LoginHandler(c *gin.Context) {
+	token := c.PostForm("token")
+	adminEmail := os.Getenv("ADMIN_EMAIL")
+
+	if isValidToken(adminEmail, token) {
+		// In a real app, set a secure session cookie here
+		// For simplicity, we just redirect. You MUST implement proper sessions for a real app.
+		invalidateToken(adminEmail)
+		c.Redirect(http.StatusSeeOther, "/dashboard")
+		return
+	}
+
+	c.String(http.StatusUnauthorized, "Invalid or expired token")
+}
+
+func DashboardHandler(c *gin.Context) {
+	// Real app needs session validation here!
+	primeKey := os.Getenv("PRIME_KEY")
+	c.HTML(http.StatusOK, "dashboard.html", gin.H{
+		"PrimeKey": primeKey,
+	})
+}
+
+func ApiDocsHandler(c *gin.Context) {
+	primeKey := os.Getenv("PRIME_KEY")
+	c.HTML(http.StatusOK, "api-docs.html", gin.H{
+		"PrimeKey": primeKey,
+	})
+}
+
+type UserCredits struct {
+	LicenseID    string `json:"licenseId"`
+	Email        string `json:"email"`
+	Balance      int    `json:"balance"` // remaining credits
+	CreditsTopup int    `json:"creditsTopup"`
+	TokensUsed   int    `json:"tokensUsed"`
+	LastUpdated  int64  `json:"lastUpdated"`
+	Application  string `json:"application"`
+}
+
+func AuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		apiKey := c.GetHeader("X-API-Key")
+		primeKey := os.Getenv("PRIME_KEY")
+		if apiKey == "" {
+			apiKey = c.Query("api_key") // fallback to query param if needed
+		}
+		if apiKey != primeKey {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: Invalid API Key"})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+func LocalDataHandler(c *gin.Context) {
+	// For the dashboard to list everything, we only return the local creditsStore
+	// No more Firebase connectivity.
+	c.JSON(http.StatusOK, gin.H{"users": creditsStore})
+}
+
+var (
+	creditsStore = make(map[string]*UserCredits)
+	passphrase   = "32bytepassphraseforaesgcmlocal!!" // Exactly 32 bytes
+	cachePath    = ".local/credits_cache.json.enc"
+)
+
+func init() {
+	// Ensure .local directory exists
+	if _, err := os.Stat(".local"); os.IsNotExist(err) {
+		os.Mkdir(".local", 0755)
+	}
+	// Load cache on startup
+	if err := loadEncryptedCache(&creditsStore, cachePath, passphrase); err != nil {
+		log.Println("No credit cache found or error loading, starting fresh.")
+	}
+}
+
+func GetCreditsHandler(c *gin.Context) {
+	licenseId := c.Param("licenseId")
+	
+	credits, ok := creditsStore[licenseId]
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "License ID not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, credits)
+}
+
+func CheckCreditsHandler(c *gin.Context) {
+	var req struct {
+		LicenseID       string `json:"licenseId"`
+		EstimatedTokens int    `json:"estimatedTokens"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	credits, ok := creditsStore[req.LicenseID]
+	if !ok {
+		// Default
+		credits = &UserCredits{Balance: 1000000}
+	}
+
+	allowed := (credits.Balance + credits.CreditsTopup - credits.TokensUsed) >= req.EstimatedTokens
+	c.JSON(http.StatusOK, gin.H{
+		"allowed":   allowed,
+		"remaining": (credits.Balance + credits.CreditsTopup - credits.TokensUsed),
+	})
+}
+
+func ReportUsageHandler(c *gin.Context) {
+	var req struct {
+		LicenseID       string `json:"licenseId"`
+		PromptTokens    int    `json:"promptTokens"`
+		CandidateTokens int    `json:"candidateTokens"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	totalTokens := req.PromptTokens + req.CandidateTokens
+	log.Printf("Reporting local usage for %s: %d tokens", req.LicenseID, totalTokens)
+
+	credits, ok := creditsStore[req.LicenseID]
+	if !ok {
+		credits = &UserCredits{LicenseID: req.LicenseID, Balance: 1000000}
+		creditsStore[req.LicenseID] = credits
+	}
+
+	credits.TokensUsed += totalTokens
+	credits.LastUpdated = time.Now().UnixMilli()
+
+	if err := saveEncryptedCache(creditsStore, cachePath, passphrase); err != nil {
+		log.Println("Error saving encrypted cache:", err)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "tokensUsed": totalTokens, "totalTokensUsed": credits.TokensUsed})
+}
+
+func UpdateCreditsHandler(c *gin.Context) {
+	var req struct {
+		LicenseID    string `json:"licenseId"`
+		Email        string `json:"email"`
+		Credits      int    `json:"credits"`
+		CreditsTopup int    `json:"creditsTopup"`
+		Application  string `json:"application"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	isNew := false
+	credits, ok := creditsStore[req.LicenseID]
+	if !ok {
+		credits = &UserCredits{LicenseID: req.LicenseID}
+		creditsStore[req.LicenseID] = credits
+		isNew = true
+	}
+
+	credits.Email = req.Email
+	credits.Balance = req.Credits
+	credits.CreditsTopup = req.CreditsTopup
+	credits.Application = req.Application
+	credits.LastUpdated = time.Now().UnixMilli()
+	// Maintain application if not specified? Or handle it in req?
+	// Let's assume we might want to update application too.
+	
+	if err := saveEncryptedCache(creditsStore, cachePath, passphrase); err != nil {
+		log.Println("Error saving encrypted cache after update:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save credits to local store"})
+		return
+	}
+
+	if isNew {
+		sendNewClientEmail(credits.Email, credits.LicenseID, fmt.Sprintf("%d", credits.Balance), credits.Application)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
+}
+
+func CreateUserHandler(c *gin.Context) {
+	var req struct {
+		LicenseID    string `json:"licenseId"`
+		Email        string `json:"email" binding:"required"`
+		Credits      int    `json:"credits"`
+		CreditsTopup int    `json:"creditsTopup"`
+		Application  string `json:"application"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
+		return
+	}
+
+	licenseId := req.LicenseID
+	if licenseId == "" {
+		licenseId = uuid.New().String()
+	}
+
+	credits := &UserCredits{
+		LicenseID:    licenseId,
+		Email:        req.Email,
+		Balance:      req.Credits,
+		CreditsTopup: req.CreditsTopup,
+		TokensUsed:   0,
+		LastUpdated:  time.Now().UnixMilli(),
+		Application:  req.Application,
+	}
+
+	if credits.Balance == 0 {
+		credits.Balance = 1000000 // Default
+	}
+
+	creditsStore[licenseId] = credits
+
+	if err := saveEncryptedCache(creditsStore, cachePath, passphrase); err != nil {
+		log.Println("Error saving encrypted cache after creation:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save new user to local store"})
+		return
+	}
+
+	// Send welcome email to the user with their License ID and details
+	sendNewClientEmail(credits.Email, credits.LicenseID, fmt.Sprintf("%d", credits.Balance), credits.Application)
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "licenseId": licenseId})
+}
+
+func DeleteUserHandler(c *gin.Context) {
+	var req struct {
+		LicenseID string `json:"licenseId" binding:"required"`
+		Email     string `json:"email" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	credits, ok := creditsStore[req.LicenseID]
+	if !ok || credits.Email != req.Email {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found with matching License ID and Email"})
+		return
+	}
+
+	delete(creditsStore, req.LicenseID)
+
+	if err := saveEncryptedCache(creditsStore, cachePath, passphrase); err != nil {
+		log.Println("Error saving encrypted cache after deletion:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save changes after deletion"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
+}
+
+func DeleteCreditsHandler(c *gin.Context) {
+	licenseId := c.Param("licenseId")
+	
+	if _, ok := creditsStore[licenseId]; !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	delete(creditsStore, licenseId)
+	
+	if err := saveEncryptedCache(creditsStore, cachePath, passphrase); err != nil {
+		log.Println("Error saving encrypted cache after deletion:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save changes after deletion"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
+}
