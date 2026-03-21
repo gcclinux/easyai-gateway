@@ -110,7 +110,16 @@ func main() {
 	}
 }
 
+func isDevMode() bool {
+	val := os.Getenv("DEV_MODE")
+	return val == "true" || val == "1"
+}
+
 func HomeHandler(c *gin.Context) {
+	if isDevMode() {
+		c.Redirect(http.StatusSeeOther, "/dashboard")
+		return
+	}
 	c.HTML(http.StatusOK, "login.html", nil)
 }
 
