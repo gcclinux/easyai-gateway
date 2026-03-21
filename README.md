@@ -16,6 +16,7 @@ This project is a Go-based management server for EasyEditor Premium, integrating
   PRIME_KEY=xxxxxx-xxxxxx-xxxxxx-xxxxxx
   TLS_CERT=/path/to/your/cert.crt
   TLS_KEY=/path/to/your/private.key
+  DEV_MODE=true
   ```
 
   | Variable | Description |
@@ -27,6 +28,7 @@ This project is a Go-based management server for EasyEditor Premium, integrating
   | `TLS_KEY` | *(Optional)* Path to the TLS private key file (`.key`) for HTTPS |
   | `SERVER_PORT` | Port the server listens on (defaults to `8080`) |
   | `PRIME_KEY` | Master API key used to authenticate all API requests via `X-API-Key` header |
+  | `DEV_MODE` | Disable the dashboard login credentials |
 
 ## Authentication
 
