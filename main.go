@@ -265,20 +265,12 @@ func LocalDataHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"users": creditsStore})
 }
 
-var (
-	creditsStore = make(map[string]*UserCredits)
-	passphrase   = "32bytepassphraseforaesgcmlocal!!" // Exactly 32 bytes
-	cachePath    = ".local/credits_cache.json.enc"
-)
+var creditsStore = make(map[string]*UserCredits)
 
 func init() {
-	// Ensure .local directory exists
-	if _, err := os.Stat(".local"); os.IsNotExist(err) {
-		os.Mkdir(".local", 0755)
-	}
-	// Load cache on startup
-	if err := loadEncryptedCache(&creditsStore, cachePath, passphrase); err != nil {
-		log.Println("No credit cache found or error loading, starting fresh.")
+	initFirestore()
+	if err := loadFromFirestore(creditsStore); err != nil {
+		log.Println("Error loading from Firestore, starting fresh:", err)
 	}
 }
 
@@ -350,8 +342,8 @@ func ReportUsageHandler(c *gin.Context) {
 	credits.TokensUsed += totalTokens
 	credits.LastUpdated = time.Now().UnixMilli()
 
-	if err := saveEncryptedCache(creditsStore, cachePath, passphrase); err != nil {
-		log.Println("Error saving encrypted cache:", err)
+	if err := saveUserToFirestore(credits); err != nil {
+		log.Println("Error saving to Firestore:", err)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "tokensUsed": totalTokens, "totalTokensUsed": credits.TokensUsed})
@@ -386,9 +378,9 @@ func UpdateCreditsHandler(c *gin.Context) {
 	// Maintain application if not specified? Or handle it in req?
 	// Let's assume we might want to update application too.
 
-	if err := saveEncryptedCache(creditsStore, cachePath, passphrase); err != nil {
-		log.Println("Error saving encrypted cache after update:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save credits to local store"})
+	if err := saveUserToFirestore(credits); err != nil {
+		log.Println("Error saving to Firestore after update:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save credits"})
 		return
 	}
 
@@ -433,9 +425,9 @@ func CreateUserHandler(c *gin.Context) {
 
 	creditsStore[licenseId] = credits
 
-	if err := saveEncryptedCache(creditsStore, cachePath, passphrase); err != nil {
-		log.Println("Error saving encrypted cache after creation:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save new user to local store"})
+	if err := saveUserToFirestore(credits); err != nil {
+		log.Println("Error saving to Firestore after creation:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save new user"})
 		return
 	}
 
@@ -463,9 +455,9 @@ func DeleteUserHandler(c *gin.Context) {
 
 	delete(creditsStore, req.LicenseID)
 
-	if err := saveEncryptedCache(creditsStore, cachePath, passphrase); err != nil {
-		log.Println("Error saving encrypted cache after deletion:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save changes after deletion"})
+	if err := deleteUserFromFirestore(req.LicenseID); err != nil {
+		log.Println("Error deleting from Firestore:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete user"})
 		return
 	}
 
@@ -482,9 +474,9 @@ func DeleteCreditsHandler(c *gin.Context) {
 
 	delete(creditsStore, licenseId)
 
-	if err := saveEncryptedCache(creditsStore, cachePath, passphrase); err != nil {
-		log.Println("Error saving encrypted cache after deletion:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save changes after deletion"})
+	if err := deleteUserFromFirestore(licenseId); err != nil {
+		log.Println("Error deleting from Firestore:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete user"})
 		return
 	}
 
