@@ -5,6 +5,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -182,12 +183,64 @@ func ApiDocsHandler(c *gin.Context) {
 
 type UserCredits struct {
 	LicenseID    string `json:"licenseId"`
-	Email        string `json:"email"`
-	Balance      int    `json:"balance"` // remaining credits
-	CreditsTopup int    `json:"creditsTopup"`
-	TokensUsed   int    `json:"tokensUsed"`
+	Email        string `json:"userEmail"`
+	Balance      int    `json:"monthlyToken"`
+	CreditsTopup int    `json:"topUpToken"`
+	TokensUsed   int    `json:"usedToken"`
 	LastUpdated  int64  `json:"lastUpdated"`
 	Application  string `json:"application"`
+}
+
+// UnmarshalJSON supports both old and new JSON field names for backward compatibility
+// with existing encrypted cache files.
+func (u *UserCredits) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	getString := func(keys ...string) string {
+		for _, k := range keys {
+			if v, ok := raw[k]; ok {
+				var s string
+				if json.Unmarshal(v, &s) == nil {
+					return s
+				}
+			}
+		}
+		return ""
+	}
+	getInt := func(keys ...string) int {
+		for _, k := range keys {
+			if v, ok := raw[k]; ok {
+				var n int
+				if json.Unmarshal(v, &n) == nil {
+					return n
+				}
+			}
+		}
+		return 0
+	}
+	getInt64 := func(keys ...string) int64 {
+		for _, k := range keys {
+			if v, ok := raw[k]; ok {
+				var n int64
+				if json.Unmarshal(v, &n) == nil {
+					return n
+				}
+			}
+		}
+		return 0
+	}
+
+	u.LicenseID = getString("licenseId")
+	u.Email = getString("userEmail", "email")
+	u.Balance = getInt("monthlyToken", "balance")
+	u.CreditsTopup = getInt("topUpToken", "creditsTopup")
+	u.TokensUsed = getInt("usedToken", "tokensUsed")
+	u.LastUpdated = getInt64("lastUpdated")
+	u.Application = getString("application")
+	return nil
 }
 
 func AuthMiddleware() gin.HandlerFunc {
@@ -238,7 +291,16 @@ func GetCreditsHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, credits)
+	c.JSON(http.StatusOK, gin.H{
+		"licenseId":      credits.LicenseID,
+		"userEmail":      credits.Email,
+		"monthlyToken":   credits.Balance,
+		"topUpToken":     credits.CreditsTopup,
+		"usedToken":      credits.TokensUsed,
+		"availableToken": credits.Balance + credits.CreditsTopup - credits.TokensUsed,
+		"lastUpdated":    credits.LastUpdated,
+		"application":    credits.Application,
+	})
 }
 
 func CheckCreditsHandler(c *gin.Context) {
@@ -257,10 +319,11 @@ func CheckCreditsHandler(c *gin.Context) {
 		credits = &UserCredits{Balance: 1000000}
 	}
 
-	allowed := (credits.Balance + credits.CreditsTopup - credits.TokensUsed) >= req.EstimatedTokens
+	available := credits.Balance + credits.CreditsTopup - credits.TokensUsed
+	allowed := available >= req.EstimatedTokens
 	c.JSON(http.StatusOK, gin.H{
-		"allowed":   allowed,
-		"remaining": (credits.Balance + credits.CreditsTopup - credits.TokensUsed),
+		"allowed":        allowed,
+		"availableToken": available,
 	})
 }
 

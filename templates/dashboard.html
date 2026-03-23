@@ -262,18 +262,18 @@
                 const tdId = document.createElement('td'); tdId.textContent = u.licenseId; tdId.style.fontFamily = 'monospace'; row.appendChild(tdId);
 
                 const tdEmail = document.createElement('td');
-                const inEmail = document.createElement('input'); inEmail.type = 'text'; inEmail.value = u.email || '';
+                const inEmail = document.createElement('input'); inEmail.type = 'text'; inEmail.value = u.userEmail || '';
                 tdEmail.appendChild(inEmail); row.appendChild(tdEmail);
 
                 const tdTotal = document.createElement('td');
-                const inTotal = document.createElement('input'); inTotal.type = 'number'; inTotal.value = u.balance || 1000000; inTotal.style.width = '100px';
+                const inTotal = document.createElement('input'); inTotal.type = 'number'; inTotal.value = u.monthlyToken || 1000000; inTotal.style.width = '100px';
                 tdTotal.appendChild(inTotal); row.appendChild(tdTotal);
 
                 const tdTopup = document.createElement('td');
-                const inTopup = document.createElement('input'); inTopup.type = 'number'; inTopup.value = u.creditsTopup || 0; inTopup.style.width = '80px';
+                const inTopup = document.createElement('input'); inTopup.type = 'number'; inTopup.value = u.topUpToken || 0; inTopup.style.width = '80px';
                 tdTopup.appendChild(inTopup); row.appendChild(tdTopup);
 
-                const tdUsed = document.createElement('td'); tdUsed.textContent = (u.tokensUsed || 0).toLocaleString(); row.appendChild(tdUsed);
+                const tdUsed = document.createElement('td'); tdUsed.textContent = (u.usedToken || 0).toLocaleString(); row.appendChild(tdUsed);
 
                 const tdApp = document.createElement('td');
                 const inApp = document.createElement('input'); inApp.type = 'text'; inApp.value = u.application || 'EasyAI';
@@ -351,14 +351,14 @@
 
                     Object.values(users).forEach(u => {
                         const uRow = document.createElement('tr');
-                        const cBase = u.balance !== undefined ? u.balance : 1000000;
-                        const cTop = u.creditsTopup !== undefined ? u.creditsTopup : 0;
-                        const tdUsedCount = u.tokensUsed !== undefined ? u.tokensUsed : 0;
+                        const cBase = u.monthlyToken !== undefined ? u.monthlyToken : 1000000;
+                        const cTop = u.topUpToken !== undefined ? u.topUpToken : 0;
+                        const tdUsedCount = u.usedToken !== undefined ? u.usedToken : 0;
                         const remVal = (cBase + cTop) - tdUsedCount;
 
                         const uCols = [
                             u.licenseId,
-                            u.email || '',
+                            u.userEmail || '',
                             cBase.toLocaleString(),
                             cTop.toLocaleString(),
                             tdUsedCount.toLocaleString(),
