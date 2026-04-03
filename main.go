@@ -11,7 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -41,6 +41,9 @@ func main() {
 	// Serve static files
 	r.Static("/static", "./static")
 
+	// Serve favicon from static directory
+	r.StaticFile("/favicon.ico", "./static/favicon.ico")
+
 	// Load HTML templates from the templates directory
 	r.LoadHTMLGlob("templates/*")
 
@@ -63,6 +66,14 @@ func main() {
 		// New API entries
 		api.POST("/create-user", CreateUserHandler)
 		api.POST("/delete-user", DeleteUserHandler)
+
+		// Model access management
+		api.PUT("/users/:licenseId/models", UpdateModelAccessHandler)
+		api.GET("/users/:licenseId/models", GetModelAccessHandler)
+
+		// Agent management
+		api.POST("/agents", CreateAgentHandler)
+		api.DELETE("/agents/:agentName", DeleteAgentHandler)
 	}
 	host := os.Getenv("SERVER_HOST")
 	port := os.Getenv("SERVER_PORT")
@@ -82,6 +93,9 @@ func main() {
 	if useTLS {
 		scheme = "https"
 	}
+
+	// Start the Ollama reverse proxy on a separate port (non-blocking).
+	go StartOllamaProxy()
 
 	// Print a clean, informative startup message
 	log.Printf("=====================================================")
@@ -177,13 +191,14 @@ func ApiDocsHandler(c *gin.Context) {
 }
 
 type UserCredits struct {
-	LicenseID    string `json:"licenseId"`
-	Email        string `json:"userEmail"`
-	Balance      int    `json:"monthlyToken"`
-	CreditsTopup int    `json:"topUpToken"`
-	TokensUsed   int    `json:"usedToken"`
-	LastUpdated  int64  `json:"lastUpdated"`
-	Application  string `json:"application"`
+	LicenseID       string   `json:"licenseId"`
+	Email           string   `json:"userEmail"`
+	Balance         int      `json:"monthlyToken"`
+	CreditsTopup    int      `json:"topUpToken"`
+	TokensUsed      int      `json:"usedToken"`
+	LastUpdated     int64    `json:"lastUpdated"`
+	Application     string   `json:"application"`
+	ModelAccessList []string `json:"modelAccessList,omitempty"`
 }
 
 // UnmarshalJSON supports both old and new JSON field names for backward compatibility
@@ -228,6 +243,18 @@ func (u *UserCredits) UnmarshalJSON(data []byte) error {
 		return 0
 	}
 
+	getStringSlice := func(keys ...string) []string {
+		for _, k := range keys {
+			if v, ok := raw[k]; ok {
+				var s []string
+				if json.Unmarshal(v, &s) == nil {
+					return s
+				}
+			}
+		}
+		return nil
+	}
+
 	u.LicenseID = getString("licenseId")
 	u.Email = getString("userEmail", "email")
 	u.Balance = getInt("monthlyToken", "balance")
@@ -235,6 +262,7 @@ func (u *UserCredits) UnmarshalJSON(data []byte) error {
 	u.TokensUsed = getInt("usedToken", "tokensUsed")
 	u.LastUpdated = getInt64("lastUpdated")
 	u.Application = getString("application")
+	u.ModelAccessList = getStringSlice("modelAccessList")
 	return nil
 }
 
@@ -257,10 +285,17 @@ func AuthMiddleware() gin.HandlerFunc {
 func LocalDataHandler(c *gin.Context) {
 	// For the dashboard to list everything, we only return the local creditsStore
 	// No more Firebase connectivity.
-	c.JSON(http.StatusOK, gin.H{"users": creditsStore})
+	creditsStoreMu.RLock()
+	users := make(map[string]*UserCredits, len(creditsStore))
+	for k, v := range creditsStore {
+		users[k] = v
+	}
+	creditsStoreMu.RUnlock()
+	c.JSON(http.StatusOK, gin.H{"users": users})
 }
 
 var creditsStore = make(map[string]*UserCredits)
+var creditsStoreMu sync.RWMutex
 
 func init() {
 	// Load .env.local early so GOOGLE_APPLICATION_CREDENTIALS (and other vars) are available
@@ -271,12 +306,17 @@ func init() {
 	if err := loadFromFirestore(creditsStore); err != nil {
 		log.Println("Error loading from Firestore, starting fresh:", err)
 	}
+	if err := loadAgentsFromFirestore(); err != nil {
+		log.Println("Error loading agents from Firestore:", err)
+	}
 }
 
 func GetCreditsHandler(c *gin.Context) {
 	licenseId := c.Param("licenseId")
 
+	creditsStoreMu.RLock()
 	credits, ok := creditsStore[licenseId]
+	creditsStoreMu.RUnlock()
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "License ID not found"})
 		return
@@ -304,7 +344,9 @@ func CheckCreditsHandler(c *gin.Context) {
 		return
 	}
 
+	creditsStoreMu.RLock()
 	credits, ok := creditsStore[req.LicenseID]
+	creditsStoreMu.RUnlock()
 	if !ok {
 		// Default
 		credits = &UserCredits{Balance: 1000000}
@@ -332,6 +374,7 @@ func ReportUsageHandler(c *gin.Context) {
 	totalTokens := req.PromptTokens + req.CandidateTokens
 	log.Printf("Reporting local usage for %s: %d tokens", req.LicenseID, totalTokens)
 
+	creditsStoreMu.Lock()
 	credits, ok := creditsStore[req.LicenseID]
 	if !ok {
 		credits = &UserCredits{LicenseID: req.LicenseID, Balance: 1000000}
@@ -340,6 +383,7 @@ func ReportUsageHandler(c *gin.Context) {
 
 	credits.TokensUsed += totalTokens
 	credits.LastUpdated = time.Now().UnixMilli()
+	creditsStoreMu.Unlock()
 
 	if err := saveUserToFirestore(credits); err != nil {
 		log.Println("Error saving to Firestore:", err)
@@ -362,6 +406,7 @@ func UpdateCreditsHandler(c *gin.Context) {
 	}
 
 	isNew := false
+	creditsStoreMu.Lock()
 	credits, ok := creditsStore[req.LicenseID]
 	if !ok {
 		credits = &UserCredits{LicenseID: req.LicenseID}
@@ -374,8 +419,7 @@ func UpdateCreditsHandler(c *gin.Context) {
 	credits.CreditsTopup = req.CreditsTopup
 	credits.Application = req.Application
 	credits.LastUpdated = time.Now().UnixMilli()
-	// Maintain application if not specified? Or handle it in req?
-	// Let's assume we might want to update application too.
+	creditsStoreMu.Unlock()
 
 	if err := saveUserToFirestore(credits); err != nil {
 		log.Println("Error saving to Firestore after update:", err)
@@ -422,7 +466,9 @@ func CreateUserHandler(c *gin.Context) {
 		credits.Balance = 1000000 // Default
 	}
 
+	creditsStoreMu.Lock()
 	creditsStore[licenseId] = credits
+	creditsStoreMu.Unlock()
 
 	if err := saveUserToFirestore(credits); err != nil {
 		log.Println("Error saving to Firestore after creation:", err)
@@ -446,13 +492,16 @@ func DeleteUserHandler(c *gin.Context) {
 		return
 	}
 
+	creditsStoreMu.Lock()
 	credits, ok := creditsStore[req.LicenseID]
 	if !ok || credits.Email != req.Email {
+		creditsStoreMu.Unlock()
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found with matching License ID and Email"})
 		return
 	}
 
 	delete(creditsStore, req.LicenseID)
+	creditsStoreMu.Unlock()
 
 	if err := deleteUserFromFirestore(req.LicenseID); err != nil {
 		log.Println("Error deleting from Firestore:", err)
@@ -463,15 +512,72 @@ func DeleteUserHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success"})
 }
 
+// UpdateModelAccessHandler handles PUT /api/users/:licenseId/models.
+// It updates the user's ModelAccessList in creditsStore and persists to Firestore.
+func UpdateModelAccessHandler(c *gin.Context) {
+	licenseId := c.Param("licenseId")
+
+	var req struct {
+		Models []string `json:"models"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	creditsStoreMu.Lock()
+	user, ok := creditsStore[licenseId]
+	if !ok {
+		creditsStoreMu.Unlock()
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+	user.ModelAccessList = req.Models
+	creditsStoreMu.Unlock()
+
+	if err := saveUserToFirestore(user); err != nil {
+		log.Println("Error saving model access to Firestore:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to persist changes"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
+}
+
+// GetModelAccessHandler handles GET /api/users/:licenseId/models.
+// It returns the user's current ModelAccessList as a JSON array.
+func GetModelAccessHandler(c *gin.Context) {
+	licenseId := c.Param("licenseId")
+
+	creditsStoreMu.RLock()
+	user, ok := creditsStore[licenseId]
+	creditsStoreMu.RUnlock()
+
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	models := user.ModelAccessList
+	if models == nil {
+		models = []string{}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"models": models})
+}
+
 func DeleteCreditsHandler(c *gin.Context) {
 	licenseId := c.Param("licenseId")
 
+	creditsStoreMu.Lock()
 	if _, ok := creditsStore[licenseId]; !ok {
+		creditsStoreMu.Unlock()
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
 	}
 
 	delete(creditsStore, licenseId)
+	creditsStoreMu.Unlock()
 
 	if err := deleteUserFromFirestore(licenseId); err != nil {
 		log.Println("Error deleting from Firestore:", err)

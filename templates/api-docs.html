@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EasyAI API Documentation & Playground</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="/static/css/dashboard.css">
     <style>
         :root {
@@ -120,6 +121,11 @@
         .method.delete {
             background-color: #ef444420;
             color: #ef4444;
+        }
+
+        .method.put {
+            background-color: #a855f720;
+            color: #a855f7;
         }
 
         .path {
@@ -274,6 +280,25 @@
             <div class="nav-group-title">LLM Usage</div>
             <a href="#check-credits" class="nav-link">Check Credits</a>
             <a href="#report-usage" class="nav-link">Report Usage</a>
+        </div>
+
+        <div class="nav-group">
+            <div class="nav-group-title">Model Access</div>
+            <a href="#update-model-access" class="nav-link">Update Model Access</a>
+            <a href="#get-model-access" class="nav-link">Get Model Access</a>
+        </div>
+
+        <div class="nav-group">
+            <div class="nav-group-title">Agents</div>
+            <a href="#create-agent" class="nav-link">Create Agent</a>
+            <a href="#delete-agent" class="nav-link">Delete Agent</a>
+        </div>
+
+        <div class="nav-group">
+            <div class="nav-group-title">Ollama Proxy</div>
+            <a href="#proxy-tags" class="nav-link">List Models</a>
+            <a href="#proxy-agents" class="nav-link">List Agents</a>
+            <a href="#proxy-overview" class="nav-link">Proxy Overview</a>
         </div>
 
         <div class="nav-group">
@@ -456,6 +481,250 @@
             </div>
         </div>
 
+        <!-- Update Model Access -->
+        <div id="update-model-access" class="section">
+            <div class="endpoint-header">
+                <span class="method put">PUT</span>
+                <span class="path">/api/users/:licenseId/models</span>
+            </div>
+            <p>Set the list of Ollama models a user is allowed to access. An empty list grants access to all models.</p>
+
+            <div class="playground-card">
+                <div class="playground-header">
+                    <span>Playground</span>
+                </div>
+                <div class="playground-body">
+                    <div class="form-group">
+                        <label>License ID</label>
+                        <input type="text" id="param_update_models" placeholder="425cbaa0-...">
+                    </div>
+                    <div class="form-group">
+                        <label>JSON Body</label>
+                        <textarea id="body_update_models" rows="4">{
+  "models": ["llama3:latest", "mistral:latest"]
+}</textarea>
+                    </div>
+                    <button class="btn-send"
+                        onclick="sendRequest('PUT', '/api/users/' + document.getElementById('param_update_models').value + '/models', 'body_update_models', 'resp_update_models')">Test
+                        Endpoint</button>
+
+                    <div id="resp_update_models" class="response-view"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Get Model Access -->
+        <div id="get-model-access" class="section">
+            <div class="endpoint-header">
+                <span class="method get">GET</span>
+                <span class="path">/api/users/:licenseId/models</span>
+            </div>
+            <p>Retrieve the current model access list for a user.</p>
+
+            <div class="playground-card">
+                <div class="playground-header">
+                    <span>Playground</span>
+                </div>
+                <div class="playground-body">
+                    <div class="form-group">
+                        <label>License ID</label>
+                        <input type="text" id="param_get_models" placeholder="425cbaa0-...">
+                    </div>
+                    <button class="btn-send"
+                        onclick="sendRequest('GET', '/api/users/' + document.getElementById('param_get_models').value + '/models', null, 'resp_get_models')">Test
+                        Endpoint</button>
+
+                    <div id="resp_get_models" class="response-view"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Create Agent -->
+        <div id="create-agent" class="section">
+            <div class="endpoint-header">
+                <span class="method post">POST</span>
+                <span class="path">/api/agents</span>
+            </div>
+            <p>Create a new AI agent configuration. Agents combine a model with an optional system prompt and description.</p>
+
+            <div class="playground-card">
+                <div class="playground-header">
+                    <span>Playground</span>
+                </div>
+                <div class="playground-body">
+                    <div class="form-group">
+                        <label>JSON Body</label>
+                        <textarea id="body_create_agent" rows="6">{
+  "name": "code-assistant",
+  "description": "Helps with coding tasks",
+  "model": "llama3:latest",
+  "systemPrompt": "You are a helpful coding assistant."
+}</textarea>
+                    </div>
+                    <button class="btn-send"
+                        onclick="sendRequest('POST', '/api/agents', 'body_create_agent', 'resp_create_agent')">Test
+                        Endpoint</button>
+
+                    <div id="resp_create_agent" class="response-view"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delete Agent -->
+        <div id="delete-agent" class="section">
+            <div class="endpoint-header">
+                <span class="method delete">DELETE</span>
+                <span class="path">/api/agents/:agentName</span>
+            </div>
+            <p>Remove an agent configuration by name.</p>
+
+            <div class="playground-card">
+                <div class="playground-header">
+                    <span>Playground</span>
+                </div>
+                <div class="playground-body">
+                    <div class="form-group">
+                        <label>Agent Name</label>
+                        <input type="text" id="param_delete_agent" placeholder="code-assistant">
+                    </div>
+                    <button class="btn-send"
+                        onclick="sendRequest('DELETE', '/api/agents/' + document.getElementById('param_delete_agent').value, null, 'resp_delete_agent')">Test
+                        Endpoint</button>
+
+                    <div id="resp_delete_agent" class="response-view"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Proxy Overview -->
+        <div id="proxy-overview" class="section">
+            <div class="endpoint-header">
+                <span class="method" style="background-color:#f59e0b20;color:#f59e0b;">PROXY</span>
+                <span class="path">Ollama Proxy</span>
+            </div>
+            <p>The Ollama Proxy runs on a separate port (default <code>11434</code>) and forwards authenticated requests to the internal Ollama server. All requests require a <code>Bearer</code> token or <code>X-API-Key</code> header containing a valid user License ID.</p>
+
+            <div class="playground-card">
+                <div class="playground-header">
+                    <span>Configuration</span>
+                </div>
+                <div class="playground-body">
+                    <table style="width:100%;border-collapse:collapse;">
+                        <tr style="border-bottom:1px solid #334155;">
+                            <td style="padding:0.5rem;color:var(--text-muted);">Env Variable</td>
+                            <td style="padding:0.5rem;color:var(--text-muted);">Default</td>
+                            <td style="padding:0.5rem;color:var(--text-muted);">Description</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid #334155;">
+                            <td style="padding:0.5rem;"><code>OLLAMA_PROXY_HOST</code></td>
+                            <td style="padding:0.5rem;"><code>0.0.0.0</code></td>
+                            <td style="padding:0.5rem;">Bind address</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid #334155;">
+                            <td style="padding:0.5rem;"><code>OLLAMA_PROXY_PORT</code></td>
+                            <td style="padding:0.5rem;"><code>11434</code></td>
+                            <td style="padding:0.5rem;">Proxy listen port</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:0.5rem;"><code>OLLAMA_INTERNAL_URL</code></td>
+                            <td style="padding:0.5rem;"><code>http://localhost:11435</code></td>
+                            <td style="padding:0.5rem;">Internal Ollama server URL</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <div class="playground-card" style="margin-top:1rem;">
+                <div class="playground-header">
+                    <span>Authentication</span>
+                </div>
+                <div class="playground-body">
+                    <p style="margin:0 0 0.75rem 0;color:var(--text-muted);font-size:0.875rem;">Include your License ID in one of these headers:</p>
+                    <pre>Authorization: Bearer YOUR-LICENSE-ID</pre>
+                    <pre style="margin-top:0.5rem;">X-API-Key: YOUR-LICENSE-ID</pre>
+                </div>
+            </div>
+
+            <div class="playground-card" style="margin-top:1rem;">
+                <div class="playground-header">
+                    <span>Error Responses</span>
+                </div>
+                <div class="playground-body">
+                    <table style="width:100%;border-collapse:collapse;">
+                        <tr style="border-bottom:1px solid #334155;">
+                            <td style="padding:0.5rem;color:var(--text-muted);">Status</td>
+                            <td style="padding:0.5rem;color:var(--text-muted);">Meaning</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid #334155;">
+                            <td style="padding:0.5rem;"><span class="status-badge status-error">401</span></td>
+                            <td style="padding:0.5rem;">No API key provided</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid #334155;">
+                            <td style="padding:0.5rem;"><span class="status-badge status-error">403</span></td>
+                            <td style="padding:0.5rem;">Invalid key, insufficient credits, or model not authorized</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:0.5rem;"><span class="status-badge status-error">502</span></td>
+                            <td style="padding:0.5rem;">Upstream Ollama server unreachable</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Proxy: List Models -->
+        <div id="proxy-tags" class="section">
+            <div class="endpoint-header">
+                <span class="method get">GET</span>
+                <span class="path">/api/tags</span>
+                <span style="font-size:0.75rem;color:var(--warning);background:#f59e0b20;padding:0.125rem 0.5rem;border-radius:0.25rem;">PROXY</span>
+            </div>
+            <p>List available Ollama models, filtered by the authenticated user's model access list. Served on the proxy port.</p>
+
+            <div class="playground-card">
+                <div class="playground-header">
+                    <span>Example Response</span>
+                </div>
+                <div class="playground-body">
+                    <pre>{
+  "models": [
+    {
+      "name": "llama3:latest",
+      "size": 4661224676,
+      "digest": "a6990ed6be41..."
+    }
+  ]
+}</pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Proxy: List Agents -->
+        <div id="proxy-agents" class="section">
+            <div class="endpoint-header">
+                <span class="method get">GET</span>
+                <span class="path">/api/agents</span>
+                <span style="font-size:0.75rem;color:var(--warning);background:#f59e0b20;padding:0.125rem 0.5rem;border-radius:0.25rem;">PROXY</span>
+            </div>
+            <p>List available agents, filtered by the authenticated user's model access list. Served on the proxy port.</p>
+
+            <div class="playground-card">
+                <div class="playground-header">
+                    <span>Example Response</span>
+                </div>
+                <div class="playground-body">
+                    <pre>[
+  {
+    "name": "code-assistant",
+    "description": "Helps with coding tasks",
+    "model": "llama3:latest",
+    "systemPrompt": "You are a helpful coding assistant."
+  }
+]</pre>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script>
@@ -475,15 +744,17 @@
                 headers: headers
             };
 
-            if (method === 'POST') {
+            if (method === 'POST' || method === 'PUT') {
                 headers['Content-Type'] = 'application/json';
-                const bodyText = document.getElementById(bodyId).value;
-                try {
-                    JSON.parse(bodyText); // validation
-                    options.body = bodyText;
-                } catch (e) {
-                    respElement.innerHTML = `<div class="response-header"><span class="status-badge status-error">Invalid JSON</span></div><pre>${e.message}</pre>`;
-                    return;
+                if (bodyId) {
+                    const bodyText = document.getElementById(bodyId).value;
+                    try {
+                        JSON.parse(bodyText); // validation
+                        options.body = bodyText;
+                    } catch (e) {
+                        respElement.innerHTML = `<div class="response-header"><span class="status-badge status-error">Invalid JSON</span></div><pre>${e.message}</pre>`;
+                        return;
+                    }
                 }
             }
 

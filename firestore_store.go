@@ -74,3 +74,36 @@ func getUserFromFirestore(licenseID string) (*UserCredits, error) {
 	}
 	return &u, nil
 }
+
+func agentsCollection() *firestore.CollectionRef {
+	return fsClient.Collection("agents")
+}
+
+func loadAgentsFromFirestore() error {
+	ctx := context.Background()
+	docs, err := agentsCollection().Documents(ctx).GetAll()
+	if err != nil {
+		return err
+	}
+	for _, doc := range docs {
+		var a Agent
+		if err := doc.DataTo(&a); err != nil {
+			log.Printf("Error parsing agent doc %s: %v", doc.Ref.ID, err)
+			continue
+		}
+		agentsStore[a.Name] = &a
+	}
+	return nil
+}
+
+func saveAgentToFirestore(a *Agent) error {
+	ctx := context.Background()
+	_, err := agentsCollection().Doc(a.Name).Set(ctx, a)
+	return err
+}
+
+func deleteAgentFromFirestore(name string) error {
+	ctx := context.Background()
+	_, err := agentsCollection().Doc(name).Delete(ctx)
+	return err
+}
