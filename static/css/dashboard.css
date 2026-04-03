@@ -60,7 +60,7 @@ body {
 }
 
 .container {
-    max-width: 1200px;
+    max-width: 1600px;
     margin: 40px auto;
     padding: 0 40px;
 }
@@ -148,7 +148,7 @@ table {
 }
 
 th, td {
-    padding: 16px;
+    padding: 12px 10px;
     text-align: left;
     border-bottom: 1px solid var(--border);
 }
@@ -174,9 +174,10 @@ input[type="text"], input[type="number"] {
     background-color: #0f172a;
     border: 1px solid var(--border);
     color: var(--text-main);
-    padding: 8px 12px;
+    padding: 6px 8px;
     border-radius: 4px;
-    font-size: 0.875rem;
+    font-size: 0.8rem;
+    min-width: 0;
 }
 
 input:focus {

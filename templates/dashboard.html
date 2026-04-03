@@ -77,6 +77,7 @@
                         <th>Top-up Pool</th>
                         <th>Used</th>
                         <th>Remaining</th>
+                        <th>Model Access</th>
                         <th>Application</th>
                         <th>Last Updated</th>
                     </tr>
@@ -131,13 +132,32 @@
                         <th>Email Address</th>
                         <th>Monthly Credits</th>
                         <th>Top-up Pool</th>
-                        <th>Consumed</th>
+                        <th>Model Access</th>
                         <th>Target App</th>
                         <th>Action</th>
                     </tr>
                 </thead>
                 <tbody id="genericTableBody"></tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- Model Picker Modal -->
+    <div id="modelPickerModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:200;align-items:center;justify-content:center;">
+        <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:30px;width:400px;max-width:90vw;">
+            <h3 style="margin:0 0 8px 0;color:var(--accent);font-size:1.1rem;">
+                <i class="fas fa-plus-circle" style="margin-right:8px;"></i>Grant Model Access
+            </h3>
+            <p id="modelPickerUser" style="margin:0 0 20px 0;color:var(--text-muted);font-size:0.8rem;"></p>
+            <label style="display:block;font-size:0.75rem;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;font-weight:600;">Select Model</label>
+            <select id="modelPickerSelect" style="width:100%;padding:10px 12px;background:#0f172a;border:1px solid var(--border);color:var(--text-main);border-radius:6px;font-size:0.875rem;margin-bottom:20px;cursor:pointer;">
+            </select>
+            <div style="display:flex;gap:10px;justify-content:flex-end;">
+                <button id="modelPickerCancel" class="secondary" style="padding:8px 20px;">Cancel</button>
+                <button id="modelPickerConfirm" style="padding:8px 20px;background-color:var(--success);">
+                    <i class="fas fa-check" style="margin-right:6px;"></i>Grant Access
+                </button>
+            </div>
         </div>
     </div>
 
@@ -156,6 +176,78 @@
 
             const PRIME_KEY = "{{.PrimeKey}}";
             const storageKey = 'easy_ai_llms';
+
+            function saveModelAccess(licenseId, models, callback) {
+                fetch('/api/users/' + licenseId + '/models', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'X-API-Key': PRIME_KEY },
+                    body: JSON.stringify({ models: models })
+                }).then(r => r.json()).then(res => {
+                    if (res.status === 'success' && callback) callback();
+                }).catch(err => console.error('Model access update failed:', err));
+            }
+
+            // Model picker modal logic
+            const modelPickerModal = document.getElementById('modelPickerModal');
+            const modelPickerSelect = document.getElementById('modelPickerSelect');
+            const modelPickerUser = document.getElementById('modelPickerUser');
+            let modelPickerCallback = null;
+
+            function getAvailableModels() {
+                const rows = Array.from(document.querySelectorAll('#llmTableBody tr'));
+                return rows.map(row => {
+                    const inputs = row.querySelectorAll('input');
+                    return { provider: inputs[1].value, model: inputs[2].value };
+                }).filter(m => m.model.trim() !== '');
+            }
+
+            function showModelPicker(userEmail, currentModels, onSelect) {
+                const models = getAvailableModels();
+                modelPickerSelect.innerHTML = '';
+
+                // Filter out models the user already has
+                const available = models.filter(m => !currentModels.includes(m.model));
+
+                if (available.length === 0) {
+                    const opt = document.createElement('option');
+                    opt.textContent = 'No additional models available';
+                    opt.disabled = true;
+                    modelPickerSelect.appendChild(opt);
+                } else {
+                    available.forEach(m => {
+                        const opt = document.createElement('option');
+                        opt.value = m.model;
+                        opt.textContent = m.model + '  (' + m.provider + ')';
+                        modelPickerSelect.appendChild(opt);
+                    });
+                }
+
+                modelPickerUser.textContent = userEmail ? 'User: ' + userEmail : '';
+                modelPickerCallback = onSelect;
+                modelPickerModal.style.display = 'flex';
+            }
+
+            document.getElementById('modelPickerCancel').onclick = () => {
+                modelPickerModal.style.display = 'none';
+                modelPickerCallback = null;
+            };
+
+            document.getElementById('modelPickerConfirm').onclick = () => {
+                const selected = modelPickerSelect.value;
+                if (selected && modelPickerCallback) {
+                    modelPickerCallback(selected);
+                }
+                modelPickerModal.style.display = 'none';
+                modelPickerCallback = null;
+            };
+
+            // Close modal on backdrop click
+            modelPickerModal.onclick = (e) => {
+                if (e.target === modelPickerModal) {
+                    modelPickerModal.style.display = 'none';
+                    modelPickerCallback = null;
+                }
+            };
 
             const initialLLMs = [
                 { id: 1, value: 100, provider: 'Ollama', model: 'qwen2.5-coder:3b', notes: 'Recommended for coding tasks' },
@@ -274,7 +366,57 @@
                 const inTopup = document.createElement('input'); inTopup.type = 'number'; inTopup.value = u.topUpToken || 0; inTopup.style.width = '80px';
                 tdTopup.appendChild(inTopup); row.appendChild(tdTopup);
 
-                const tdUsed = document.createElement('td'); tdUsed.textContent = (u.usedToken || 0).toLocaleString(); row.appendChild(tdUsed);
+                // Model Access column
+                const tdModels = document.createElement('td');
+                const modelAccessList = u.modelAccessList || [];
+                const modelContainer = document.createElement('div');
+                modelContainer.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;align-items:center;min-width:160px;';
+
+                function renderModelTags() {
+                    modelContainer.innerHTML = '';
+                    const currentList = u._modelAccessList || modelAccessList;
+                    if (currentList.length === 0) {
+                        const allTag = document.createElement('span');
+                        allTag.textContent = 'All models';
+                        allTag.style.cssText = 'font-size:0.75rem;color:var(--success);font-style:italic;';
+                        modelContainer.appendChild(allTag);
+                    } else {
+                        currentList.forEach(m => {
+                            const tag = document.createElement('span');
+                            tag.textContent = m;
+                            tag.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:#38bdf820;color:#38bdf8;padding:2px 8px;border-radius:4px;font-size:0.7rem;font-family:monospace;';
+                            const removeBtn = document.createElement('span');
+                            removeBtn.textContent = '×';
+                            removeBtn.style.cssText = 'cursor:pointer;font-weight:bold;color:#ef4444;margin-left:2px;';
+                            removeBtn.onclick = () => {
+                                u._modelAccessList = (u._modelAccessList || [...currentList]).filter(x => x !== m);
+                                saveModelAccess(u.licenseId, u._modelAccessList, renderModelTags);
+                            };
+                            tag.appendChild(removeBtn);
+                            modelContainer.appendChild(tag);
+                        });
+                    }
+                    // Add button
+                    const addBtn = document.createElement('span');
+                    addBtn.innerHTML = '<i class="fas fa-plus" style="font-size:0.6rem;"></i>';
+                    addBtn.style.cssText = 'cursor:pointer;background:#334155;color:var(--text-muted);padding:2px 6px;border-radius:4px;font-size:0.7rem;';
+                    addBtn.title = 'Add model';
+                    addBtn.onclick = () => {
+                        const current = u._modelAccessList || [...(u.modelAccessList || [])];
+                        showModelPicker(u.userEmail || u.licenseId, current, (model) => {
+                            if (!current.includes(model)) {
+                                current.push(model);
+                                u._modelAccessList = current;
+                                saveModelAccess(u.licenseId, current, renderModelTags);
+                            }
+                        });
+                    };
+                    modelContainer.appendChild(addBtn);
+                }
+
+                renderModelTags();
+                tdModels.appendChild(modelContainer);
+                row.appendChild(tdModels);
 
                 const tdApp = document.createElement('td');
                 const inApp = document.createElement('input'); inApp.type = 'text'; inApp.value = u.application || 'EasyAI';
@@ -363,9 +505,7 @@
                             cBase.toLocaleString(),
                             cTop.toLocaleString(),
                             tdUsedCount.toLocaleString(),
-                            remVal.toLocaleString(),
-                            u.application || '',
-                            u.lastUpdated ? new Date(u.lastUpdated).toLocaleString() : 'N/A'
+                            remVal.toLocaleString()
                         ];
 
                         uCols.forEach((text, idx) => {
@@ -374,13 +514,33 @@
                             if (idx === 0) td.style.fontFamily = 'monospace';
                             uRow.appendChild(td);
                         });
+
+                        // Model access tags (read-only in usage view)
+                        const tdModelAccess = document.createElement('td');
+                        const models = u.modelAccessList || [];
+                        if (models.length === 0) {
+                            tdModelAccess.innerHTML = '<span style="font-size:0.75rem;color:var(--success);font-style:italic;">All models</span>';
+                        } else {
+                            tdModelAccess.innerHTML = models.map(m =>
+                                '<span style="display:inline-block;background:#38bdf820;color:#38bdf8;padding:2px 8px;border-radius:4px;font-size:0.7rem;font-family:monospace;margin:1px 2px;">' + m + '</span>'
+                            ).join('');
+                        }
+                        uRow.appendChild(tdModelAccess);
+
+                        // Application and Last Updated
+                        [u.application || '', u.lastUpdated ? new Date(u.lastUpdated).toLocaleString() : 'N/A'].forEach(text => {
+                            const td = document.createElement('td');
+                            td.textContent = text;
+                            uRow.appendChild(td);
+                        });
+
                         usageTbody.appendChild(uRow);
 
                         createGenericRow(u, genericTbody);
                     });
 
                     if (Object.keys(users).length === 0) {
-                        const row = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 8; td.textContent = "No active license records identified."; td.style.textAlign = "center"; row.appendChild(td); usageTbody.appendChild(row);
+                        const row = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 9; td.textContent = "No active license records identified."; td.style.textAlign = "center"; row.appendChild(td); usageTbody.appendChild(row);
                     }
                 })
                 .catch(err => console.error('Data Fetch Error:', err));
