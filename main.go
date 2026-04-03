@@ -27,11 +27,6 @@ var (
 func main() {
 	flag.Parse()
 
-	err := godotenv.Load(".env.local")
-	if err != nil {
-		log.Println("Error loading .env.local file, relying on environment variables.")
-	}
-
 	// Initialize Gin router
 	r := gin.Default()
 
@@ -268,6 +263,10 @@ func LocalDataHandler(c *gin.Context) {
 var creditsStore = make(map[string]*UserCredits)
 
 func init() {
+	// Load .env.local early so GOOGLE_APPLICATION_CREDENTIALS (and other vars) are available
+	if err := godotenv.Load(".env.local"); err != nil {
+		log.Println("init: .env.local not found, relying on environment variables.")
+	}
 	initFirestore()
 	if err := loadFromFirestore(creditsStore); err != nil {
 		log.Println("Error loading from Firestore, starting fresh:", err)

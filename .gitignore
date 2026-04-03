@@ -3,3 +3,4 @@
 .env.local
 .local
 *.exe
+service-account*.json
